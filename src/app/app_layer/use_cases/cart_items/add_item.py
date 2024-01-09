@@ -51,11 +51,14 @@ class AddCartItemUseCase:
     async def _add_item_to_cart(self, data: AddItemToCartInputDTO) -> CartOutputDTO:
         user = await self._auth_system.get_user_data(auth_data=data.auth_data)
 
-        async with self._uow(autocommit=True):
+        async with self._uow(autocommit=False):
             cart = await self._uow.carts.retrieve(cart_id=data.cart_id)
+            await self._uow.commit()
 
-        self._check_user_ownership(cart=cart, user=user)
-        cart = await self._update_cart(cart=cart, data=data)
+            self._check_user_ownership(cart=cart, user=user)
+            cart = await self._update_cart(cart=cart, data=data)
+
+            await self._uow.commit()
 
         return CartOutputDTO.model_validate(cart)
 
@@ -80,9 +83,7 @@ class AddCartItemUseCase:
     ) -> Cart:
         item = await self._try_to_create_item(cart=cart, data=data)
         cart.add_new_item(item)
-
-        async with self._uow(autocommit=True):
-            await self._uow.items.add_item(item=item)
+        await self._uow.items.add_item(item=item)
 
         logger.info(
             "Item %s successfully added to cart %s with qty %s",
@@ -113,9 +114,7 @@ class AddCartItemUseCase:
 
     async def _increase_item_qty(self, cart: Cart, item_id: int, qty: Decimal) -> Cart:
         item = cart.increase_item_qty(item_id=item_id, qty=qty)
-
-        async with self._uow(autocommit=True):
-            await self._uow.items.update_item(item=item)
+        await self._uow.items.update_item(item=item)
 
         logger.info(
             "Cart %s. Item %s qty successfully increased. Current item qty %s",
